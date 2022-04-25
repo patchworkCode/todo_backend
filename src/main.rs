@@ -7,6 +7,7 @@ use axum::{
 };
 use serde::{Serialize, Deserialize};
 use mongodb::{Client, options::ClientOptions, Database};
+use futures::{TryStreamExt, TryFutureExt};
 
 #[tokio::main]
 async fn main() -> mongodb::error::Result<()> {
@@ -44,8 +45,23 @@ async fn hello_handler() -> Html<&'static str> {
 }
 
 
-async fn dynamic(extract::Path(id): extract::Path<String>) -> Html<String> {
-    Html(format!("<h1>The path parameter was: {}", id))
+async fn dynamic(
+    extract::Path(id): extract::Path<String>,
+    extract::Extension(db) : extract::Extension<Database>) -> Json<Vec<Item>> {
+    let all_items = retrieve_all(&db).await.unwrap();
+    Json(all_items)
+}
+
+async fn retrieve_all(db: &Database) -> mongodb::error::Result<Vec<Item>> {
+    let mut all_items: Vec<Item> = vec![];
+    let typed_collection = db.collection::<Item>("items");
+    let mut cursor = typed_collection.find(None, None).await?;
+
+    while let Some(item) = cursor.try_next().await? {
+        all_items.push(item);
+    };
+
+    Ok(all_items)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
