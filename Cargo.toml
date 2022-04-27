@@ -12,3 +12,5 @@ serde_json = "1"
 serde = { version = "1.0", features = ["derive"] }
 mongodb = "2.2"
 futures = "0.3"
+uuid = {version = "0.8", features = ["v4"], package = "uuid"}
+bson = {version = "2.2", features = ["uuid-0_8", "serde_with"]}
