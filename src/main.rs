@@ -23,7 +23,7 @@ async fn main() -> mongodb::error::Result<()> {
 
     let app = Router::new()
         .route("/", get(hello_handler))
-        .route("/dynamic/:id", get(dynamic).post(post_dynamic))
+        .route("/todo/", get(dynamic).post(post_dynamic))
         .layer(extract::Extension(db));
 
     axum::Server::bind(&"0.0.0.0:3001".parse().unwrap())
@@ -49,7 +49,6 @@ async fn hello_handler() -> Html<&'static str> {
 
 
 async fn dynamic(
-    extract::Path(id): extract::Path<String>,
     extract::Extension(db) : extract::Extension<Database>) -> Json<Vec<PayloadItem>> {
     let all_items = retrieve_all(&db).await.unwrap();
     Json(all_items)
@@ -102,7 +101,7 @@ impl From<PayloadItem> for Item {
 
 async fn post_dynamic(
     extract::Extension(db) : extract::Extension<Database>,
-    extract::Path(id): extract::Path<String>, extract::Json(payload) : extract::Json<PayloadItem>
+    extract::Json(payload) : extract::Json<PayloadItem>
 ) -> Json<PayloadItem> {
    let return_item = Item::from(payload);
     insert_db(&db,&return_item).await.unwrap();
@@ -118,7 +117,6 @@ async fn insert_db(db: &Database, item: &Item) -> mongodb::error::Result<()> {
 
 async fn replace(
     extract::Extension(db) : extract::Extension<Database>,
-    extract::Path(id): extract::Path<String>,
     extract::Json(payload) : extract::Json<PayloadItem>
 ) -> Json<PayloadItem> {
     todo!()
