@@ -6,10 +6,11 @@ use axum::{
     Json
 };
 use serde::{Serialize, Deserialize};
-use mongodb::{Client, options::ClientOptions, Database};
+use mongodb::{Client,options::ClientOptions,bson::doc, Database};
 use futures::{TryStreamExt, TryFutureExt};
 use uuid::Uuid;
 use bson::serde_helpers::uuid_as_binary;
+use std::collections::HashMap;
 
 
 #[tokio::main]
@@ -23,7 +24,7 @@ async fn main() -> mongodb::error::Result<()> {
 
     let app = Router::new()
         .route("/", get(hello_handler))
-        .route("/todo/", get(dynamic).post(post_dynamic))
+        .route("/todo/", get(get_all).post(post_one).put(replace))
         .layer(extract::Extension(db));
 
     axum::Server::bind(&"0.0.0.0:3001".parse().unwrap())
@@ -48,7 +49,7 @@ async fn hello_handler() -> Html<&'static str> {
 }
 
 
-async fn dynamic(
+async fn get_all(
     extract::Extension(db) : extract::Extension<Database>) -> Json<Vec<PayloadItem>> {
     let all_items = retrieve_all(&db).await.unwrap();
     Json(all_items)
@@ -99,7 +100,7 @@ impl From<PayloadItem> for Item {
     }
 }
 
-async fn post_dynamic(
+async fn post_one(
     extract::Extension(db) : extract::Extension<Database>,
     extract::Json(payload) : extract::Json<PayloadItem>
 ) -> Json<PayloadItem> {
@@ -116,8 +117,22 @@ async fn insert_db(db: &Database, item: &Item) -> mongodb::error::Result<()> {
 }
 
 async fn replace(
+    extract::Query(params) : extract::Query<HashMap<String, String>>,
     extract::Extension(db) : extract::Extension<Database>,
     extract::Json(payload) : extract::Json<PayloadItem>
 ) -> Json<PayloadItem> {
-    todo!()
+    println!("{:#?}", params);
+    let item = retrieve_one(&db, &params, payload).await.unwrap();
+    Json(PayloadItem::from(item))
+}
+
+async fn retrieve_one (db : &Database, id: &HashMap<String, String>, item: PayloadItem) -> mongodb::error::Result<Item> {
+    let typed_collection = db.collection::<Item>("items");
+    let id = id.get("id").unwrap();
+    let id_as_uuid : Uuid = Uuid::parse_str(&id[..]).unwrap();
+    let filter = doc! {"id" : id_as_uuid};
+    let update = doc! {"$set": {"text" : item.text, "complete" : item.complete}};
+    let cursor = typed_collection.find_one_and_update(filter, update, None).await?;
+    Ok(cursor.unwrap())
+
 }
