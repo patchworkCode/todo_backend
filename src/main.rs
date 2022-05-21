@@ -2,11 +2,11 @@ use axum::{
     extract,
     routing::get,
     Router,
-    response::Html,
-    Json
+    response::{Html,IntoResponse},
+    Json, http::StatusCode
 };
 use serde::{Serialize, Deserialize};
-use mongodb::{Client,options::ClientOptions,bson::doc, Database};
+use mongodb::{Client,options::ClientOptions,bson::doc, Database, results::DeleteResult};
 use futures::{TryStreamExt, TryFutureExt};
 use uuid::Uuid;
 use bson::serde_helpers::uuid_as_binary;
@@ -24,7 +24,7 @@ async fn main() -> mongodb::error::Result<()> {
 
     let app = Router::new()
         .route("/", get(hello_handler))
-        .route("/todo/", get(get_all).post(post_one).put(replace))
+        .route("/todo/", get(get_all_todo).post(post_one_todo).put(replace_one_todo).delete(delete_one_todo))
         .layer(extract::Extension(db));
 
     axum::Server::bind(&"0.0.0.0:3001".parse().unwrap())
@@ -49,7 +49,7 @@ async fn hello_handler() -> Html<&'static str> {
 }
 
 
-async fn get_all(
+async fn get_all_todo(
     extract::Extension(db) : extract::Extension<Database>) -> Json<Vec<PayloadItem>> {
     let all_items = retrieve_all(&db).await.unwrap();
     Json(all_items)
@@ -100,7 +100,7 @@ impl From<PayloadItem> for Item {
     }
 }
 
-async fn post_one(
+async fn post_one_todo(
     extract::Extension(db) : extract::Extension<Database>,
     extract::Json(payload) : extract::Json<PayloadItem>
 ) -> Json<PayloadItem> {
@@ -116,7 +116,7 @@ async fn insert_db(db: &Database, item: &Item) -> mongodb::error::Result<()> {
     Ok(())
 }
 
-async fn replace(
+async fn replace_one_todo(
     extract::Query(params) : extract::Query<HashMap<String, String>>,
     extract::Extension(db) : extract::Extension<Database>,
     extract::Json(payload) : extract::Json<PayloadItem>
@@ -134,5 +134,28 @@ async fn retrieve_one (db : &Database, id: &HashMap<String, String>, item: Paylo
     let update = doc! {"$set": {"text" : item.text, "complete" : item.complete}};
     let cursor = typed_collection.find_one_and_update(filter, update, None).await?;
     Ok(cursor.unwrap())
+
+}
+
+async fn delete_one_todo(
+    extract::Query(params) : extract::Query<HashMap<String, String>>,
+    extract::Extension(db) : extract::Extension<Database>,
+) -> impl IntoResponse {
+    let id;
+    match params.get("id") {
+        Some(value) => id = value,
+        None => return StatusCode::NOT_FOUND,
+    }
+    let id_as_uuid : Uuid = Uuid::parse_str(&id[..]).unwrap();
+    let deleted_count = delete_from_db(&db, &id_as_uuid).await.unwrap();
+    StatusCode::OK
+    
+}
+
+async fn delete_from_db(db: &Database, id: &Uuid) -> mongodb::error::Result<DeleteResult> {
+    let typed_collection = db.collection::<Item>("items");
+    let filter = doc! {"id" : id};
+    let cursor = typed_collection.delete_one(filter, None).await?;
+    Ok(cursor)
 
 }
