@@ -146,9 +146,18 @@ async fn delete_one_todo(
         Some(value) => id = value,
         None => return StatusCode::NOT_FOUND,
     }
-    let id_as_uuid : Uuid = Uuid::parse_str(&id[..]).unwrap();
+    //let id_as_uuid : Uuid = Uuid::parse_str(&id[..]).unwrap();
+    let id_as_uuid;
+    match Uuid::parse_str(&id[..]) {
+        Ok(parsed_value) => id_as_uuid = parsed_value,
+        Err(error) => return StatusCode::BAD_REQUEST
+    }
     let deleted_count = delete_from_db(&db, &id_as_uuid).await.unwrap();
-    StatusCode::OK
+    //StatusCode::OK
+    match deleted_count.deleted_count {
+        0 => StatusCode::NOT_FOUND,
+        _ => StatusCode::OK,
+    }
     
 }
 
